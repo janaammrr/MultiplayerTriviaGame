@@ -5,3 +5,19 @@ jana|multiplayer|10|1/3 correct|2026-03-17 20:03:22
 salma123|multiplayer|20|2/3 correct|2026-03-17 20:03:22
 omar|multiplayer|10|1/3 correct|2026-03-17 20:03:22
 ahmed|multiplayer|10|1/3 correct|2026-03-17 20:03:22
+omar|single|0|Player quit early|2026-03-17 21:32:27
+ali|single|10|Player quit early|2026-03-17 21:40:38
+ali|single|0|Player quit early|2026-03-17 21:41:43
+omar|single|10|Player quit early|2026-03-17 21:59:28
+omar|single|10|1/3 correct|2026-03-17 22:00:01
+omar|single|10|1/3 correct|2026-03-17 22:12:27
+omar|single|0|0/3 correct|2026-03-17 22:12:38
+omar|single|20|2/3 correct|2026-03-17 22:34:43
+salma123|multiplayer|0|0/6 correct|2026-03-17 22:46:41
+ali|multiplayer|0|0/3 correct|2026-03-17 22:46:41
+jana|multiplayer|10|1/3 correct|2026-03-17 22:46:41
+salma123|multiplayer|0|0/6 correct|2026-03-17 22:46:41
+salma123|single|10|1/3 correct|2026-03-17 22:58:09
+salma123|multiplayer|10|1/3 correct|2026-03-17 23:04:11
+ahmed|multiplayer|10|1/3 correct|2026-03-17 23:04:11
+yousef|multiplayer|10|1/3 correct|2026-03-17 23:04:11
