@@ -1,104 +1,211 @@
 package server;
 
+import model.AnswerRecord;
+import model.GameConfig;
 import model.Question;
-import model.User;
+import model.Team;
 
-import java.io.*;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 public class GameRoom {
-    private List<ClientHandler> players = new ArrayList<>();
-    private List<Question> questions;
-    private Map<String, Integer> scores = new HashMap<>();
+    private final Team firstTeam;
+    private final Team secondTeam;
+    private final List<Question> questions;
+    private final GameService gameService;
+    private final GameConfig config;
+    private final Map<String, Integer> scores = new LinkedHashMap<>();
+    private final Map<String, List<AnswerRecord>> answerHistory = new HashMap<>();
+    private volatile boolean questionActive;
 
-    public GameRoom(List<Question> questions) {
+    public GameRoom(Team firstTeam, Team secondTeam, List<Question> questions,
+                    GameService gameService, GameConfig config) {
+        this.firstTeam = firstTeam;
+        this.secondTeam = secondTeam;
         this.questions = questions;
-    }
+        this.gameService = gameService;
+        this.config = config;
 
-    public void addPlayer(ClientHandler player) {
-        players.add(player);
-        scores.put(player.getUser().getUsername(), 0);
+        for (ClientHandler player : getAllPlayers()) {
+            scores.put(player.getUser().getUsername(), 0);
+            answerHistory.put(player.getUser().getUsername(), new ArrayList<>());
+            player.setCurrentRoom(this);
+        }
     }
 
     public void startGame() {
-        broadcast("Game starting with " + players.size() + " players!");
+        try {
+            broadcast("Game starting: " + firstTeam.getTeamName() + " vs " + secondTeam.getTeamName());
+            broadcast("Category: " + firstTeam.getCategory() + " | Difficulty: " + firstTeam.getDifficulty()
+                    + " | Questions: " + questions.size());
 
-        for (Question q : questions) {
-            askQuestion(q);
+            for (int i = 0; i < questions.size(); i++) {
+                askQuestion(i, questions.get(i));
+            }
+
+            endGame();
+        } catch (Exception e) {
+            broadcast("A game error occurred: " + e.getMessage());
+            Server.log("Game room error: " + e.getMessage());
+        } finally {
+            for (ClientHandler player : getAllPlayers()) {
+                player.setCurrentRoom(null);
+            }
+            TeamManager.finishMatch(firstTeam, secondTeam);
         }
-
-        endGame();
     }
 
-    private void askQuestion(Question q) {
-        broadcast("\n" + q.getText());
+    private void askQuestion(int questionIndex, Question question) {
+        questionActive = true;
+        for (ClientHandler player : getAllPlayers()) {
+            player.prepareForNextQuestion();
+        }
+
+        broadcast("\nQuestion " + (questionIndex + 1) + "/" + questions.size());
+        broadcast("Category: " + question.getCategory().getDisplayName()
+                + " | Difficulty: " + question.getDifficulty().getDisplayName());
+        broadcast(question.getText());
 
         char option = 'A';
-        for (String c : q.getChoices()) {
-            broadcast(option + ". " + c);
+        for (String choice : question.getChoices()) {
+            broadcast(option + ". " + choice);
             option++;
         }
 
-        broadcast("Answer now! (15 seconds)");
+        broadcast("Answer now! (" + config.getQuestionDurationSeconds() + " seconds)");
+        long endTime = System.currentTimeMillis() + (config.getQuestionDurationSeconds() * 1000L);
+        long lastSecondShown = -1;
 
-        ExecutorService executor = Executors.newSingleThreadExecutor();
-        Future<String> future = executor.submit(() -> waitForAnswer());
-
-        try {
-            String result = future.get(15, TimeUnit.SECONDS);
-
-            if (result != null) {
-                String[] parts = result.split(":");
-                String username = parts[0];
-                char answer = parts[1].toUpperCase().charAt(0);
-
-                if (answer == q.getCorrectAnswer()) {
-                    broadcast(username + " answered correctly!");
-                    scores.put(username, scores.get(username) + 10);
-                } else {
-                    broadcast(username + " answered wrong!");
-                }
-            } else {
-                broadcast("No answers received.");
+        while (System.currentTimeMillis() < endTime) {
+            long remainingSeconds = Math.max(0, (long) Math.ceil((endTime - System.currentTimeMillis()) / 1000.0));
+            if (remainingSeconds != lastSecondShown) {
+                broadcast("Time left: " + remainingSeconds + " seconds");
+                lastSecondShown = remainingSeconds;
             }
 
-        } catch (TimeoutException e) {
-            broadcast("Time is up!");
-        } catch (Exception e) {
-            e.printStackTrace();
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
         }
 
-        executor.shutdownNow();
+        questionActive = false;
+        evaluateQuestion(question);
         showScores();
     }
 
-    private String waitForAnswer() {
-        while (true) {
-            for (ClientHandler p : players) {
-                String ans = p.pollAnswer();
-                if (ans != null) {
-                    return p.getUser().getUsername() + ":" + ans;
-                }
+    private void evaluateQuestion(Question question) {
+        boolean anySubmitted = false;
+
+        for (ClientHandler player : getAllPlayers()) {
+            String username = player.getUser().getUsername();
+            String answer = player.pollAnswer();
+
+            if (answer == null || gameService.isQuit(answer)) {
+                answerHistory.get(username).add(new AnswerRecord(question.getText(), "No Answer",
+                        question.getCorrectAnswer(), false));
+                continue;
             }
+
+            anySubmitted = true;
+            String normalized = gameService.normalizeAnswer(answer);
+            boolean correct = normalized != null && normalized.charAt(0) == question.getCorrectAnswer();
+            if (correct) {
+                scores.put(username, scores.get(username) + 10);
+                broadcast(username + " answered correctly.");
+            } else {
+                broadcast(username + " answered incorrectly.");
+            }
+
+            answerHistory.get(username).add(new AnswerRecord(question.getText(),
+                    normalized == null ? answer : normalized, question.getCorrectAnswer(), correct));
         }
+
+        if (!anySubmitted) {
+            broadcast("No answers received before timeout.");
+        }
+        broadcast("Correct answer: " + question.getCorrectAnswer());
+    }
+
+    public boolean isQuestionActive() {
+        return questionActive;
+    }
+
+    public synchronized void handleDisconnect(ClientHandler disconnectedPlayer) {
+        String name = disconnectedPlayer.getUser() == null
+                ? "Unknown"
+                : disconnectedPlayer.getUser().getName();
+        broadcast("Player disconnected: " + name);
+        Server.log("Client disconnected during game: " + name);
+        questionActive = false;
     }
 
     private void showScores() {
         broadcast("Scores:");
-        for (String user : scores.keySet()) {
-            broadcast(user + ": " + scores.get(user));
+        for (Map.Entry<String, Integer> entry : scores.entrySet()) {
+            broadcast(entry.getKey() + ": " + entry.getValue());
         }
+        broadcast("Team totals:");
+        broadcast(firstTeam.getTeamName() + ": " + calculateTeamScore(firstTeam));
+        broadcast(secondTeam.getTeamName() + ": " + calculateTeamScore(secondTeam));
+    }
+
+    private int calculateTeamScore(Team team) {
+        int total = 0;
+        for (ClientHandler player : team.getMembers()) {
+            total += scores.getOrDefault(player.getUser().getUsername(), 0);
+        }
+        return total;
     }
 
     private void endGame() {
         broadcast("\nGame Over!");
         showScores();
+
+        int firstTeamScore = calculateTeamScore(firstTeam);
+        int secondTeamScore = calculateTeamScore(secondTeam);
+        if (firstTeamScore > secondTeamScore) {
+            broadcast("Winner: " + firstTeam.getTeamName());
+        } else if (secondTeamScore > firstTeamScore) {
+            broadcast("Winner: " + secondTeam.getTeamName());
+        } else {
+            broadcast("The match ended in a draw.");
+        }
+
+        for (ClientHandler player : getAllPlayers()) {
+            List<AnswerRecord> records = answerHistory.get(player.getUser().getUsername());
+            player.sendMessage("Your question details:");
+            for (AnswerRecord record : records) {
+                player.sendMessage(record.getQuestionText());
+                player.sendMessage("Your answer: " + record.getSubmittedAnswer()
+                        + " | Correct: " + record.getCorrectAnswer()
+                        + " | Result: " + (record.isCorrect() ? "Correct" : "Wrong"));
+            }
+            gameService.recordMultiplayerGame(player.getUser().getUsername(),
+                    scores.getOrDefault(player.getUser().getUsername(), 0),
+                    gameService.buildSummary(records));
+            player.sendMessage("Match finished. Reconnect to start a new session.");
+            player.closeConnection();
+        }
     }
 
-    private void broadcast(String msg) {
-        for (ClientHandler p : players) {
-            p.sendMessage(msg);
+    private List<ClientHandler> getAllPlayers() {
+        List<ClientHandler> players = new ArrayList<>();
+        players.addAll(firstTeam.getMembers());
+        players.addAll(secondTeam.getMembers());
+        return players;
+    }
+
+    private void broadcast(String message) {
+        for (ClientHandler player : getAllPlayers()) {
+            if (!player.isDisconnected()) {
+                player.sendMessage(message);
+            }
         }
     }
 }

@@ -1,12 +1,36 @@
 package server;
 
 import model.User;
-import java.io.*;
-import java.util.*;
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 public class AuthService {
-    private Map<String, User> users = new HashMap<>();
-    private final String FILE = "data/users.txt";
+    public static class LoginResponse {
+        private final User user;
+        private final int statusCode;
+
+        public LoginResponse(User user, int statusCode) {
+            this.user = user;
+            this.statusCode = statusCode;
+        }
+
+        public User getUser() {
+            return user;
+        }
+
+        public int getStatusCode() {
+            return statusCode;
+        }
+    }
+
+    private static final String FILE = "data/users.txt";
+    private final Map<String, User> users = new HashMap<>();
 
     public AuthService() {
         loadUsers();
@@ -17,16 +41,23 @@ public class AuthService {
             String line;
             while ((line = br.readLine()) != null) {
                 String[] parts = line.split(",");
-                users.put(parts[0], new User(parts[2], parts[0], parts[1]));
+                if (parts.length >= 3) {
+                    users.put(parts[0], new User(parts[2], parts[0], parts[1]));
+                }
             }
         } catch (IOException e) {
-            System.out.println("Error loading users.");
+            Server.log("Error loading users.");
         }
     }
 
-    public String register(String name, String username, String password) {
-        if (users.containsKey(username))
-            return "ERROR: Username already exists";
+    public synchronized boolean usernameExists(String username) {
+        return users.containsKey(username);
+    }
+
+    public synchronized String register(String name, String username, String password) {
+        if (users.containsKey(username)) {
+            return "CUSTOM ERROR: Username already exists. Change username.";
+        }
 
         User user = new User(name, username, password);
         users.put(username, user);
@@ -34,19 +65,23 @@ public class AuthService {
         try (BufferedWriter bw = new BufferedWriter(new FileWriter(FILE, true))) {
             bw.write(username + "," + password + "," + name);
             bw.newLine();
-        } catch (IOException e) {}
+        } catch (IOException e) {
+            return "ERROR: Could not save user";
+        }
 
         return "SUCCESS";
     }
 
-    public User login(String username, String password) {
-        if (!users.containsKey(username))
-            return null;
+    public synchronized LoginResponse login(String username, String password) {
+        if (!users.containsKey(username)) {
+            return new LoginResponse(null, 404);
+        }
 
         User user = users.get(username);
-        if (!user.getPassword().equals(password))
-            return new User("ERROR401", "", "");
+        if (!user.getPassword().equals(password)) {
+            return new LoginResponse(null, 401);
+        }
 
-        return user;
+        return new LoginResponse(user, 200);
     }
 }

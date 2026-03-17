@@ -1,3 +1,40 @@
 What is the capital of France?|Geography|easy|Paris|London|Rome|Berlin|A
-2+2=?|Math|easy|3|4|5|6|B
-Largest planet?|Science|medium|Earth|Mars|Jupiter|Venus|C
+Which country has the Nile River flowing through Cairo?|Geography|easy|Egypt|Brazil|Japan|Canada|A
+What is the largest ocean on Earth?|Geography|medium|Atlantic Ocean|Indian Ocean|Pacific Ocean|Arctic Ocean|C
+Which desert is the largest hot desert in the world?|Geography|medium|Gobi|Kalahari|Arabian|Sahara|D
+Which continent contains the most countries?|Geography|hard|Asia|Africa|Europe|South America|B
+2 + 2 = ?|Math|easy|3|4|5|6|B
+What is 9 x 7?|Math|easy|54|63|72|81|B
+What is the square root of 144?|Math|medium|10|11|12|13|C
+What is the value of pi rounded to 2 decimal places?|Math|medium|3.12|3.14|3.41|3.16|B
+What is the derivative of x^2?|Math|hard|x|2x|x^2|2|B
+Which planet is known as the Red Planet?|Science|easy|Earth|Mars|Jupiter|Venus|B
+What gas do plants absorb from the atmosphere?|Science|easy|Oxygen|Hydrogen|Carbon Dioxide|Nitrogen|C
+What is the largest planet in our solar system?|Science|medium|Earth|Mars|Jupiter|Venus|C
+What is H2O commonly known as?|Science|medium|Hydrogen|Water|Oxygen|Salt|B
+What particle has a negative electric charge?|Science|hard|Proton|Neutron|Electron|Photon|C
+Who was the first President of the United States?|History|easy|George Washington|Abraham Lincoln|John Adams|Thomas Jefferson|A
+In which year did World War II end?|History|medium|1943|1944|1945|1946|C
+Which civilization built the pyramids of Giza?|History|easy|Romans|Greeks|Egyptians|Persians|C
+Which wall fell in 1989?|History|medium|Great Wall|Berlin Wall|Hadrian's Wall|Wall of China|B
+Who was known as the Maid of Orleans?|History|hard|Cleopatra|Joan of Arc|Queen Victoria|Marie Curie|B
+How many players are on a standard soccer team on the field?|Sports|easy|9|10|11|12|C
+Which sport uses a racket, shuttlecock, and net?|Sports|easy|Tennis|Badminton|Baseball|Cricket|B
+In basketball, how many points is a free throw worth?|Sports|medium|1|2|3|4|A
+Which country won the FIFA World Cup in 2018?|Sports|medium|Brazil|Germany|France|Argentina|C
+In which sport is the Davis Cup awarded?|Sports|hard|Football|Tennis|Golf|Hockey|B
+What does CPU stand for?|Technology|easy|Central Process Unit|Central Processing Unit|Computer Personal Unit|Core Processing Utility|B
+Which company created Java?|Technology|medium|Microsoft|Apple|Sun Microsystems|IBM|C
+What does HTML stand for?|Technology|easy|HyperText Markup Language|HighText Machine Language|HyperTool Multi Language|Home Tool Markup Language|A
+Which data structure uses FIFO order?|Technology|medium|Stack|Queue|Tree|Graph|B
+Which algorithmic complexity is usually faster for large inputs?|Technology|hard|O(n^2)|O(n log n)|O(2^n)|O(n!)|B
+Who wrote Romeo and Juliet?|Literature|easy|Charles Dickens|William Shakespeare|Leo Tolstoy|Mark Twain|B
+Who wrote 1984?|Literature|medium|George Orwell|J.K. Rowling|Ernest Hemingway|Jane Austen|A
+Which novel begins with "Call me Ishmael"?|Literature|hard|Moby-Dick|Hamlet|The Odyssey|Macbeth|A
+Which poet wrote The Raven?|Literature|medium|Edgar Allan Poe|Robert Frost|T.S. Eliot|Walt Whitman|A
+Who wrote Pride and Prejudice?|Literature|easy|Jane Austen|Emily Bronte|Virginia Woolf|Mary Shelley|A
+How many days are there in a leap year?|GeneralKnowledge|easy|364|365|366|367|C
+Which instrument measures temperature?|GeneralKnowledge|easy|Barometer|Thermometer|Speedometer|Altimeter|B
+How many continents are there?|GeneralKnowledge|medium|5|6|7|8|C
+What is the currency of Japan?|GeneralKnowledge|medium|Won|Yen|Dollar|Euro|B
+Which metal is liquid at room temperature?|GeneralKnowledge|hard|Gold|Mercury|Silver|Copper|B

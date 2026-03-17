@@ -1,2 +1,6 @@
 jana,1234,Jana
 ali,abcd,Ali
+salma123,salma,salma
+omar,12345,omar
+ahmed,123456,ahmed
+yousef,1234567,yousef
