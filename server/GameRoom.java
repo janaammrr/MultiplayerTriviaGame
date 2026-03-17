@@ -53,6 +53,7 @@ public class GameRoom {
         } finally {
             for (ClientHandler player : getAllPlayers()) {
                 player.setCurrentRoom(null);
+                player.finishMultiplayerSession();
             }
             TeamManager.finishMatch(firstTeam, secondTeam);
         }
@@ -77,13 +78,14 @@ public class GameRoom {
 
         broadcast("Answer now! (" + config.getQuestionDurationSeconds() + " seconds)");
         long endTime = System.currentTimeMillis() + (config.getQuestionDurationSeconds() * 1000L);
-        long lastSecondShown = -1;
+        List<Integer> milestones = buildCountdownMilestones(config.getQuestionDurationSeconds());
+        int milestoneIndex = 0;
 
         while (System.currentTimeMillis() < endTime) {
             long remainingSeconds = Math.max(0, (long) Math.ceil((endTime - System.currentTimeMillis()) / 1000.0));
-            if (remainingSeconds != lastSecondShown) {
-                broadcast("Time left: " + remainingSeconds + " seconds");
-                lastSecondShown = remainingSeconds;
+            while (milestoneIndex < milestones.size() && remainingSeconds <= milestones.get(milestoneIndex)) {
+                broadcast("Time left: " + milestones.get(milestoneIndex) + " seconds");
+                milestoneIndex++;
             }
 
             try {
@@ -142,7 +144,6 @@ public class GameRoom {
                 : disconnectedPlayer.getUser().getName();
         broadcast("Player disconnected: " + name);
         Server.log("Client disconnected during game: " + name);
-        questionActive = false;
     }
 
     private void showScores() {
@@ -189,8 +190,7 @@ public class GameRoom {
             gameService.recordMultiplayerGame(player.getUser().getUsername(),
                     scores.getOrDefault(player.getUser().getUsername(), 0),
                     gameService.buildSummary(records));
-            player.sendMessage("Match finished. Reconnect to start a new session.");
-            player.closeConnection();
+            player.sendMessage("Match finished. Returning to main menu.");
         }
     }
 
@@ -207,5 +207,19 @@ public class GameRoom {
                 player.sendMessage(message);
             }
         }
+    }
+
+    private List<Integer> buildCountdownMilestones(int durationSeconds) {
+        List<Integer> milestones = new ArrayList<>();
+        int[] defaults = {15, 10, 5};
+        for (int value : defaults) {
+            if (durationSeconds >= value) {
+                milestones.add(value);
+            }
+        }
+        if (milestones.isEmpty() && durationSeconds > 0) {
+            milestones.add(durationSeconds);
+        }
+        return milestones;
     }
 }

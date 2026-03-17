@@ -20,6 +20,7 @@ import java.util.Set;
 import java.util.TreeSet;
 
 public class GameService {
+    private static final String TIMEOUT_MARKER = "__TIMEOUT__";
     private final List<Question> questions = new ArrayList<>();
     private final GameConfig config;
     private final ScoreHistoryService scoreHistoryService;
@@ -134,6 +135,13 @@ public class GameService {
                 return true;
             }
 
+            if (TIMEOUT_MARKER.equals(answer)) {
+                results.add(new AnswerRecord(question.getText(), "No Answer",
+                        question.getCorrectAnswer(), false));
+                out.println("Score: " + user.getScore());
+                continue;
+            }
+
             String normalized = normalizeAnswer(answer);
             boolean correct = normalized != null && normalized.charAt(0) == question.getCorrectAnswer();
             if (correct) {
@@ -207,7 +215,8 @@ public class GameService {
     private String readTimedAnswer(BufferedReader in, PrintWriter out, int durationSeconds)
             throws IOException, ClientDisconnectedException {
         long endTime = System.currentTimeMillis() + (durationSeconds * 1000L);
-        long lastSecondShown = -1;
+        List<Integer> milestones = buildCountdownMilestones(durationSeconds);
+        int milestoneIndex = 0;
 
         while (System.currentTimeMillis() < endTime) {
             if (in.ready()) {
@@ -219,9 +228,9 @@ public class GameService {
             }
 
             long remainingSeconds = Math.max(0, (long) Math.ceil((endTime - System.currentTimeMillis()) / 1000.0));
-            if (remainingSeconds != lastSecondShown) {
-                out.println("Time left: " + remainingSeconds + " seconds");
-                lastSecondShown = remainingSeconds;
+            while (milestoneIndex < milestones.size() && remainingSeconds <= milestones.get(milestoneIndex)) {
+                out.println("Time left: " + milestones.get(milestoneIndex) + " seconds");
+                milestoneIndex++;
             }
 
             try {
@@ -233,10 +242,24 @@ public class GameService {
         }
 
         out.println("Time out!");
-        return "";
+        return TIMEOUT_MARKER;
     }
 
     public boolean isQuit(String value) {
-        return value != null && ("-".equals(value.trim()) || value.trim().isEmpty());
+        return value != null && ("-".equals(value.trim()) || " ".equals(value));
+    }
+
+    private List<Integer> buildCountdownMilestones(int durationSeconds) {
+        List<Integer> milestones = new ArrayList<>();
+        int[] defaults = {15, 10, 5};
+        for (int value : defaults) {
+            if (durationSeconds >= value) {
+                milestones.add(value);
+            }
+        }
+        if (milestones.isEmpty() && durationSeconds > 0) {
+            milestones.add(durationSeconds);
+        }
+        return milestones;
     }
 }

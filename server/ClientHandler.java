@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.util.List;
 import java.util.Set;
 
@@ -27,6 +28,7 @@ public class ClientHandler extends Thread {
     private GameRoom currentRoom;
     private boolean disconnected;
     private boolean asyncListenerStarted;
+    private volatile boolean multiplayerSessionActive;
 
     public ClientHandler(Socket socket, AuthService authService, GameService gameService, GameConfig config) {
         this.socket = socket;
@@ -73,15 +75,15 @@ public class ClientHandler extends Thread {
                     }
                 } else if ("2".equals(option.trim())) {
                     if (handleCreateTeam()) {
+                        beginMultiplayerSession();
                         startAsyncInputListener();
                         waitForMultiplayerToEnd();
-                        return;
                     }
                 } else if ("3".equals(option.trim())) {
                     if (handleJoinTeam()) {
+                        beginMultiplayerSession();
                         startAsyncInputListener();
                         waitForMultiplayerToEnd();
-                        return;
                     }
                 } else if ("4".equals(option.trim())) {
                     printTeams();
@@ -177,67 +179,52 @@ public class ClientHandler extends Thread {
             return false;
         }
 
-        out.println("Available categories: " + gameService.getAvailableCategories());
-        String category = in.readLine();
-        if (category == null || isQuit(category)) {
-            out.println("Cancelled.");
-            return false;
-        }
-        if (!containsIgnoreCase(gameService.getAvailableCategories(), category)) {
-            out.println("Invalid category.");
+        String category = readCategoryChoice();
+        if (category == null) {
             return false;
         }
 
-        out.println("Available difficulties: " + gameService.getAvailableDifficulties());
-        String difficulty = in.readLine();
-        if (difficulty == null || isQuit(difficulty)) {
-            out.println("Cancelled.");
-            return false;
-        }
-        if (!containsIgnoreCase(gameService.getAvailableDifficulties(), difficulty)) {
-            out.println("Invalid difficulty.");
+        String difficulty = readDifficultyChoice();
+        if (difficulty == null) {
             return false;
         }
 
-        out.println("Number of questions (1-" + gameService.getMaxQuestionCount() + "):");
-        String questionCountInput = in.readLine();
-        out.println("Players per team (" + config.getMinTeamPlayers() + "-" + config.getMaxTeamPlayers() + "):");
-        String playerCountInput = in.readLine();
-        if (questionCountInput == null || playerCountInput == null
-                || isQuit(questionCountInput) || isQuit(playerCountInput)) {
-            out.println("Cancelled.");
+        Integer questionCount = readNumberInRange(
+                "Number of questions (1-" + gameService.getMaxQuestionCount() + "):",
+                1,
+                gameService.getMaxQuestionCount(),
+                "Invalid question count."
+        );
+        if (questionCount == null) {
             return false;
         }
 
-        try {
-            int questionCount = parsePositiveInt(questionCountInput, "Invalid question count.");
-            int playersPerTeam = parsePositiveInt(playerCountInput, "Invalid number of players.");
-
-            if (questionCount < 1 || questionCount > gameService.getMaxQuestionCount()) {
-                out.println("Invalid question count.");
-                return false;
-            }
-
-            if (gameService.getQuestionsForGame(category.trim(), difficulty.trim(), questionCount).size() < questionCount) {
-                out.println("Not enough questions available for that category/difficulty selection.");
-                return false;
-            }
-
-            String result = TeamManager.createTeam(requestedTeamName.trim(), this, category.trim(),
-                    difficulty.trim(), questionCount, playersPerTeam, config);
-            out.println(result);
-            if (!"Team created successfully".equals(result)) {
-                return false;
-            }
-
-            teamName = requestedTeamName.trim();
-            out.println("Team created. Waiting for players and another team with the same category, difficulty, and team size.");
-            tryStartMatch();
-            return true;
-        } catch (InvalidInputException e) {
-            out.println(e.getMessage());
+        Integer playersPerTeam = readNumberInRange(
+                "Players per team (" + config.getMinTeamPlayers() + "-" + config.getMaxTeamPlayers() + "):",
+                config.getMinTeamPlayers(),
+                config.getMaxTeamPlayers(),
+                "Invalid number of players."
+        );
+        if (playersPerTeam == null) {
             return false;
         }
+
+        if (gameService.getQuestionsForGame(category, difficulty, questionCount).size() < questionCount) {
+            out.println("Not enough questions available for that category/difficulty selection.");
+            return false;
+        }
+
+        String result = TeamManager.createTeam(requestedTeamName.trim(), this, category,
+                difficulty, questionCount, playersPerTeam, config);
+        out.println(result);
+        if (!"Team created successfully".equals(result)) {
+            return false;
+        }
+
+        teamName = requestedTeamName.trim();
+        out.println("Team created. Waiting for players and another team with the same category, difficulty, and team size.");
+        tryStartMatch();
+        return true;
     }
 
     private boolean handleJoinTeam() throws IOException {
@@ -283,8 +270,20 @@ public class ClientHandler extends Thread {
 
         new Thread(() -> {
             try {
-                String input;
-                while (!socket.isClosed() && (input = in.readLine()) != null) {
+                while (!socket.isClosed() && multiplayerSessionActive) {
+                    String input;
+                    try {
+                        input = in.readLine();
+                    } catch (SocketTimeoutException e) {
+                        continue;
+                    }
+
+                    if (input == null) {
+                        handleDisconnect("Client disconnected during multiplayer session.");
+                        closeConnection();
+                        break;
+                    }
+
                     if (isQuit(input)) {
                         sendMessage("You left the multiplayer session.");
                         handleDisconnect("Player chose to quit.");
@@ -304,16 +303,19 @@ public class ClientHandler extends Thread {
                 }
             } catch (IOException e) {
                 handleDisconnect("I/O error in multiplayer listener: " + e.getMessage());
+            } finally {
+                asyncListenerStarted = false;
+                try {
+                    socket.setSoTimeout(0);
+                } catch (IOException ignored) {
+                }
             }
         }).start();
     }
 
     private void waitForMultiplayerToEnd() {
         try {
-            while (!disconnected && currentRoom == null) {
-                Thread.sleep(500);
-            }
-            while (!disconnected && currentRoom != null) {
+            while (!disconnected && multiplayerSessionActive) {
                 Thread.sleep(500);
             }
         } catch (InterruptedException e) {
@@ -362,6 +364,13 @@ public class ClientHandler extends Thread {
         this.currentRoom = room;
     }
 
+    public synchronized void finishMultiplayerSession() {
+        currentRoom = null;
+        teamName = null;
+        lastAnswer = null;
+        multiplayerSessionActive = false;
+    }
+
     public boolean isDisconnected() {
         return disconnected;
     }
@@ -383,6 +392,7 @@ public class ClientHandler extends Thread {
 
     private void handleDisconnect(String reason) {
         disconnected = true;
+        multiplayerSessionActive = false;
         if (teamName != null) {
             TeamManager.handleDisconnect(teamName, this);
         }
@@ -402,6 +412,64 @@ public class ClientHandler extends Thread {
         }
     }
 
+    private String readCategoryChoice() throws IOException {
+        while (true) {
+            out.println("Available categories: ALL, " + String.join(", ", gameService.getAvailableCategories()));
+            String category = in.readLine();
+            if (category == null || isQuit(category)) {
+                out.println("Cancelled.");
+                return null;
+            }
+
+            String normalized = category.trim();
+            if ("ALL".equalsIgnoreCase(normalized) || containsIgnoreCase(gameService.getAvailableCategories(), normalized)) {
+                return normalized;
+            }
+
+            out.println("Invalid category. Please choose one of the listed categories or ALL.");
+        }
+    }
+
+    private String readDifficultyChoice() throws IOException {
+        while (true) {
+            out.println("Available difficulties: ALL, " + String.join(", ", gameService.getAvailableDifficulties()));
+            String difficulty = in.readLine();
+            if (difficulty == null || isQuit(difficulty)) {
+                out.println("Cancelled.");
+                return null;
+            }
+
+            String normalized = difficulty.trim();
+            if ("ALL".equalsIgnoreCase(normalized) || containsIgnoreCase(gameService.getAvailableDifficulties(), normalized)) {
+                return normalized;
+            }
+
+            out.println("Invalid difficulty. Please choose one of the listed difficulties or ALL.");
+        }
+    }
+
+    private Integer readNumberInRange(String prompt, int min, int max, String errorMessage) throws IOException {
+        while (true) {
+            out.println(prompt);
+            String value = in.readLine();
+            if (value == null || isQuit(value)) {
+                out.println("Cancelled.");
+                return null;
+            }
+
+            try {
+                int parsed = parsePositiveInt(value, errorMessage);
+                if (parsed < min || parsed > max) {
+                    out.println(errorMessage + " Enter a value from " + min + " to " + max + ".");
+                    continue;
+                }
+                return parsed;
+            } catch (InvalidInputException e) {
+                out.println(e.getMessage());
+            }
+        }
+    }
+
     private boolean containsIgnoreCase(Set<String> values, String target) {
         for (String value : values) {
             if (value.equalsIgnoreCase(target.trim())) {
@@ -413,5 +481,14 @@ public class ClientHandler extends Thread {
 
     private boolean isQuit(String value) {
         return gameService.isQuit(value);
+    }
+
+    private void beginMultiplayerSession() {
+        multiplayerSessionActive = true;
+        try {
+            socket.setSoTimeout(500);
+        } catch (IOException e) {
+            Server.log("Could not configure multiplayer input timeout for " + user.getName());
+        }
     }
 }
