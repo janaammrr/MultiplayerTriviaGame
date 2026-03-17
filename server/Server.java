@@ -1,38 +1,31 @@
 package server;
 
-import java.net.*;
-import java.util.ArrayList;
-import java.util.List;
+import model.GameConfig;
+
+import java.net.ServerSocket;
+import java.net.Socket;
 
 public class Server {
     public static void main(String[] args) throws Exception {
         ServerSocket serverSocket = new ServerSocket(5000);
-        System.out.println("Server started...");
+        log("Server started on port 5000");
 
+        ConfigService configService = new ConfigService();
+        ScoreHistoryService scoreHistoryService = new ScoreHistoryService();
+        GameConfig config = configService.loadConfig();
         AuthService authService = new AuthService();
-        GameService gameService = new GameService();
+        GameService gameService = new GameService(config, scoreHistoryService);
+
+        log("Loaded config successfully.");
 
         while (true) {
             Socket clientSocket = serverSocket.accept();
-            System.out.println("Client connected");
-            new Thread(new ClientHandler(clientSocket, authService, gameService)).start();
+            log("Client connected: " + clientSocket.getInetAddress().getHostAddress() + ":" + clientSocket.getPort());
+            new Thread(new ClientHandler(clientSocket, authService, gameService, config)).start();
         }
     }
-    static List<ClientHandler> waitingPlayers = new ArrayList<>();
 
-public static synchronized void addToWaiting(ClientHandler player) {
-    waitingPlayers.add(player);
-
-    if (waitingPlayers.size() >= 2) {
-        GameRoom room = new GameRoom(new GameService().getQuestions());
-
-        for (ClientHandler p : waitingPlayers) {
-            room.addPlayer(p);
-        }
-
-        waitingPlayers.clear();
-
-        new Thread(() -> room.startGame()).start();
+    public static synchronized void log(String message) {
+        System.out.println(message);
     }
-}
 }

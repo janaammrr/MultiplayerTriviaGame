@@ -1,0 +1,7 @@
+# Multiplayer Trivia Game configuration
+minTeamPlayers=1
+maxTeamPlayers=5
+questionDurationSeconds=30
+singlePlayerQuestions=3
+maxQuestionsPerGame=5
+countdownWarnings=15,10,5
